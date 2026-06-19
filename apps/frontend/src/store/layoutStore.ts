@@ -1,0 +1,130 @@
+import { create } from 'zustand';
+import { UINode, UITree, ComponentType } from '@ui-builder/shared';
+import { nanoid } from '../lib/nanoid';
+
+interface LayoutState {
+  tree: UITree;
+  selectedId: string | null;
+  setTree: (tree: UITree) => void;
+  selectNode: (id: string | null) => void;
+  addNode: (type: ComponentType, parentId: string) => string;
+  removeNode: (id: string) => void;
+  moveNode: (nodeId: string, newParentId: string) => void;
+  updateNodeProps: (id: string, props: Partial<UINode['props']>) => void;
+}
+
+const defaultTree: UITree = {
+  rootId: 'root',
+  nodes: {
+    root: {
+      id: 'root',
+      type: 'Container',
+      props: { className: 'root-container', style: { display: 'flex', flexDirection: 'column', width: '100%', height: '100%', backgroundColor: '#ffffff', padding: '16px', gap: '8px' } },
+      parentId: null,
+      children: [],
+    },
+  },
+};
+
+export const useLayoutStore = create<LayoutState>((set, get) => ({
+  tree: defaultTree,
+  selectedId: null,
+
+  setTree: (tree) => set({ tree }),
+
+  selectNode: (id) => set({ selectedId: id }),
+
+  addNode: (type, parentId) => {
+    const id = nanoid();
+    const defaultProps = getDefaultProps(type);
+    const newNode: UINode = { id, type, props: defaultProps, parentId, children: [] };
+
+    set((state) => {
+      const nodes = { ...state.tree.nodes };
+      nodes[id] = newNode;
+      nodes[parentId] = {
+        ...nodes[parentId],
+        children: [...nodes[parentId].children, id],
+      };
+      return { tree: { ...state.tree, nodes }, selectedId: id };
+    });
+    return id;
+  },
+
+  removeNode: (id) => {
+    set((state) => {
+      const nodes = { ...state.tree.nodes };
+      const node = nodes[id];
+      if (!node || id === state.tree.rootId) return state;
+
+      const removeRecursive = (nodeId: string) => {
+        const n = nodes[nodeId];
+        n.children.forEach(removeRecursive);
+        delete nodes[nodeId];
+      };
+      removeRecursive(id);
+
+      if (node.parentId && nodes[node.parentId]) {
+        nodes[node.parentId] = {
+          ...nodes[node.parentId],
+          children: nodes[node.parentId].children.filter((c) => c !== id),
+        };
+      }
+      return { tree: { ...state.tree, nodes }, selectedId: null };
+    });
+  },
+
+  moveNode: (nodeId, newParentId) => {
+    set((state) => {
+      const nodes = { ...state.tree.nodes };
+      const node = nodes[nodeId];
+      if (!node || nodeId === state.tree.rootId || nodeId === newParentId) return state;
+
+      // Prevent moving into a descendant
+      let cursor: string | null = newParentId;
+      while (cursor) {
+        if (cursor === nodeId) return state;
+        cursor = nodes[cursor]?.parentId ?? null;
+      }
+
+      if (node.parentId && nodes[node.parentId]) {
+        nodes[node.parentId] = {
+          ...nodes[node.parentId],
+          children: nodes[node.parentId].children.filter((c) => c !== nodeId),
+        };
+      }
+      nodes[newParentId] = {
+        ...nodes[newParentId],
+        children: [...nodes[newParentId].children, nodeId],
+      };
+      nodes[nodeId] = { ...node, parentId: newParentId };
+      return { tree: { ...state.tree, nodes } };
+    });
+  },
+
+  updateNodeProps: (id, props) => {
+    set((state) => {
+      const nodes = { ...state.tree.nodes };
+      nodes[id] = { ...nodes[id], props: { ...nodes[id].props, ...props } };
+      return { tree: { ...state.tree, nodes } };
+    });
+  },
+}));
+
+function getDefaultProps(type: ComponentType): UINode['props'] {
+  switch (type) {
+    case 'Button':
+      return { text: 'Button', style: { padding: '8px 16px', backgroundColor: '#6366f1', color: '#ffffff', borderRadius: '6px', border: 'none', fontSize: '14px' } };
+    case 'Text':
+      return { text: 'Text block', style: { fontSize: '16px', color: '#1a1a1a' } };
+    case 'Input':
+      return { placeholder: 'Enter text...', style: { padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px', width: '200px' } };
+    case 'Image':
+      return { src: 'https://placehold.co/200x120', alt: 'Image', style: { width: '200px', height: '120px', borderRadius: '4px' } };
+    case 'Card':
+      return { style: { padding: '16px', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', gap: '8px' } };
+    case 'Container':
+    default:
+      return { style: { display: 'flex', flexDirection: 'row', gap: '8px', padding: '8px', border: '1px dashed #94a3b8', borderRadius: '4px', minHeight: '48px' } };
+  }
+}

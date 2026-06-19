@@ -1,0 +1,12 @@
+{
+  "name": "ui-builder",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --parallel --filter './apps/*' dev",
+    "build": "pnpm --filter shared build && pnpm --parallel --filter './apps/*' build",
+    "test": "pnpm --recursive test"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
